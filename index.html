@@ -54,20 +54,44 @@ body[data-t=dark] .seg .on{color:#04201c}
 #toc button{display:block;width:100%;text-align:start;border-bottom:1px solid var(--ln)}
 #msg{position:fixed;inset-inline:16px;bottom:24px;background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:8px;z-index:20;text-align:center}
 #shade{position:absolute;inset:0;z-index:8}
+.pg{position:relative}
+.textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;text-align:initial;z-index:2}
+.textLayer span,.textLayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0}
+.textLayer ::selection{background:#2563eb55}
+.hl{position:absolute;inset:0;pointer-events:none;z-index:1}
+.hl i{position:absolute;opacity:.4;mix-blend-mode:multiply;border-radius:2px}
+body[data-t=dark] .hl i{mix-blend-mode:screen;opacity:.5}
+.ar{position:absolute;border:2px dashed var(--ac);background:#2dd4bf33;z-index:3;pointer-events:none}
+#stb{position:fixed;left:50%;transform:translateX(-50%);z-index:7;display:flex;gap:8px;align-items:center;background:var(--bar);border:1px solid var(--ln);border-radius:24px;padding:6px 12px}
+#stb .c{width:30px;height:30px;border-radius:50%;padding:0;border:1px solid #0003}
+.top button{padding:10px 7px;font-size:14px}
+.top .on{color:var(--ac);font-weight:700}
+textarea,#edt{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--ln);border-radius:8px;padding:8px;font:inherit;margin-bottom:8px}
+.chip{display:inline-block;border:1px solid var(--ln);border-radius:14px;padding:3px 10px;margin:2px;font-size:13px}
+.ni{padding:10px 0;border-bottom:1px solid var(--ln);display:flex;gap:10px}
+.ni>i{width:5px;border-radius:3px;flex:none}.ni>div{flex:1}
+.ni small{color:var(--mut)}
 </style>
 </head>
 <body data-t="light">
 <div id="lib">
-  <header><h1>مكتبتي <small style="font-size:11px;color:var(--mut)">v3</small></h1><button class="add" id="add">إضافة كتب</button></header>
+  <header><h1>مكتبتي <small style="font-size:11px;color:var(--mut)">v4</small></h1><button class="add" id="add">إضافة كتب</button></header>
   <div id="grid"></div>
   <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
 </div>
 
 <div id="rd" hidden>
-  <div class="top"><button id="back">رجوع</button><span id="ttl"></span><button id="tocb">الفهرس</button><button id="setb">إعدادات</button></div>
+  <div class="top"><button id="back">رجوع</button><span id="ttl"></span><button id="tocb">الفهرس</button><button id="nb">الملاحظات</button><button id="areab">مستطيل</button><button id="setb">إعدادات</button></div>
   <div id="view"></div>
   <div class="bot"><button id="pv">السابق</button><input id="sl" type="range" min="1" value="1"><span id="pn"></span><button id="nx">التالي</button></div>
   <div id="shade" hidden></div>
+  <div id="stb" hidden><button class="c" data-c="0" style="background:#ffe14d"></button><button class="c" data-c="1" style="background:#6ee7a0"></button><button class="c" data-c="2" style="background:#7cc4ff"></button><button class="c" data-c="3" style="background:#ff9db1"></button><button id="stn">ملاحظة</button></div>
+  <div class="sheet" id="nls" hidden><h3>ملاحظات هذا الكتاب</h3><div id="nl"></div></div>
+  <div class="sheet" id="eds" hidden><h3 id="edq"></h3>
+    <textarea id="edn" rows="3" placeholder="اكتب ملاحظتك…"></textarea>
+    <input id="edt" placeholder="الوسوم (افصل بينها بفاصلة)"><div id="edc"></div>
+    <div class="row" id="edcol"></div>
+    <div class="row"><button class="add" id="edsv">حفظ</button><button id="edd">حذف</button></div></div>
   <div class="sheet" id="tocs" hidden><h3>الفهرس</h3><div id="toc"></div></div>
   <div class="sheet" id="sets" hidden>
     <h3>الإعدادات</h3>
@@ -91,8 +115,8 @@ document.body.dataset.t = S.theme;
 
 /* ---------- التخزين المحلي ---------- */
 const dbp = new Promise((ok, no) => {
-  const r = indexedDB.open('reader', 1);
-  r.onupgradeneeded = () => { r.result.createObjectStore('books', {keyPath:'id'}); r.result.createObjectStore('files', {keyPath:'id'}); };
+  const r = indexedDB.open('reader', 2);
+  r.onupgradeneeded = () => { const d = r.result; for (const n of ['books','files','notes']) if (!d.objectStoreNames.contains(n)) d.createObjectStore(n, {keyPath:'id'}); };
   r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
 });
 const tx = async (st, mode, fn) => { const db = await dbp; return new Promise((ok, no) => { const t = db.transaction(st, mode); const q = fn(t.objectStore(st)); t.oncomplete = () => ok(q.result); t.onerror = () => no(t.error); }); };
@@ -145,7 +169,7 @@ $('#file').onchange = async e => {
 };
 
 /* ---------- القارئ ---------- */
-let pdf, book, cur = 1, crop = {l:0,t:0,r:1,b:1}, io, pgs = [], est = 0, saveT;
+let NOTES = [], pdf, book, cur = 1, crop = {l:0,t:0,r:1,b:1}, io, pgs = [], est = 0, saveT;
 const view = $('#view');
 
 async function calcCrop() {
@@ -167,17 +191,28 @@ async function calcCrop() {
   return {l:Math.max(0, l - pd), t:Math.max(0, t - pd), r:Math.min(1, r + pd), b:Math.min(1, b + pd)};
 }
 
-async function draw(n, canvas) {
+const FULL = {l:0,t:0,r:1,b:1};
+async function draw(n, wrap) {
   const p = await pdf.getPage(n), v0 = p.getViewport({scale:1});
-  const c = S.crop ? crop : {l:0,t:0,r:1,b:1};
+  const c = S.crop ? crop : FULL;
   const cw = (c.r - c.l) * v0.width, ch = (c.b - c.t) * v0.height;
   const css = (view.clientWidth - 8) * S.zoom, sc = css / cw, dpr = Math.min(devicePixelRatio || 1, 2.5);
+  let canvas = wrap.querySelector('canvas');
+  if (!canvas) { canvas = document.createElement('canvas'); wrap.prepend(canvas); }
   canvas._t?.cancel();
+  wrap.querySelectorAll('.hl,.textLayer').forEach(e => e.remove());
   canvas.width = Math.round(cw * sc * dpr); canvas.height = Math.round(ch * sc * dpr);
   canvas.style.width = css + 'px'; canvas.style.height = (ch * sc) + 'px';
+  wrap.style.width = css + 'px'; wrap.style.height = (ch * sc) + 'px';
+  wrap._n = n; wrap._c = c;
   const task = canvas._t = p.render({canvasContext:canvas.getContext('2d'), viewport:p.getViewport({scale:sc * dpr}),
     transform:[1,0,0,1,-c.l * v0.width * sc * dpr, -c.t * v0.height * sc * dpr]});
-  try { await task.promise; } catch (e) { if (e?.name !== 'RenderingCancelledException') throw e; }
+  try { await task.promise; } catch (e) { if (e?.name !== 'RenderingCancelledException') throw e; return; }
+  if (canvas._t !== task) return;
+  const hl = document.createElement('div'); hl.className = 'hl'; wrap.appendChild(hl); paintHl(wrap);
+  const tl = document.createElement('div'); tl.className = 'textLayer'; tl.style.setProperty('--scale-factor', sc); wrap.appendChild(tl);
+  const v = p.getViewport({scale:sc, offsetX:-c.l * v0.width * sc, offsetY:-c.t * v0.height * sc});
+  pdfjsLib.renderTextLayer({textContentSource:await p.getTextContent(), container:tl, viewport:v, textDivs:[]});
 }
 
 async function build() {
@@ -195,13 +230,13 @@ async function build() {
     }
     io = new IntersectionObserver(es => es.forEach(e => {
       const d = e.target;
-      if (e.isIntersecting) { if (!d.firstChild) { const cv = document.createElement('canvas'); d.appendChild(cv); draw(+d.dataset.n, cv).then(() => d.style.height = cv.style.height); } }
+      if (e.isIntersecting) { if (!d.firstChild) draw(+d.dataset.n, d); }
       else if (d.firstChild) { d.firstChild._t?.cancel(); d.innerHTML = ''; }
     }), {root:view, rootMargin:'1500px 0px'});
     pgs.forEach(d => io.observe(d));
     view.scrollTop = pgs[cur - 1].offsetTop - 8;
   } else {
-    const cv = document.createElement('canvas'); view.appendChild(cv); await draw(cur, cv);
+    const w = document.createElement('div'); w.className = 'pg'; view.appendChild(w); await draw(cur, w);
   }
   ui();
 }
@@ -224,7 +259,7 @@ view.addEventListener('scroll', () => {
 async function go(n) {
   n = Math.max(1, Math.min(pdf.numPages, n));
   if (S.mode === 'scroll') { view.scrollTop = pgs[n - 1].offsetTop - 8; cur = n; ui(); }
-  else { cur = n; const cv = view.firstChild; await draw(n, cv); view.scrollTop = 0; ui(); }
+  else { cur = n; await draw(n, view.firstChild); view.scrollTop = 0; ui(); }
 }
 const next = () => go(cur + 1), prev = () => go(cur - 1);
 $('#nx').onclick = next; $('#pv').onclick = prev;
@@ -240,6 +275,15 @@ view.addEventListener('touchend', e => {
   if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5 && view.scrollWidth <= view.clientWidth + 4) (dx > 0) === S.rtl ? next() : prev();
 });
 view.addEventListener('click', e => {
+  if (area) return;
+  if (!getSelection().isCollapsed) return;
+  const wrap = e.target.closest?.('.pg');
+  if (wrap?._c) {
+    const wb = wrap.getBoundingClientRect(), c = wrap._c;
+    const fx = c.l + (e.clientX - wb.left) / wb.width * (c.r - c.l), fy = c.t + (e.clientY - wb.top) / wb.height * (c.b - c.t);
+    const h = NOTES.find(h => h.page === wrap._n && h.rects.some(r => fx >= r.x && fx <= r.x + r.w && fy >= r.y && fy <= r.y + r.h));
+    if (h) { openEditor(h); return; }
+  }
   const x = e.clientX / innerWidth;
   if (S.mode === 'paged' && (x < .25 || x > .75)) { (x < .25) === S.rtl ? prev() : next(); return; }
   document.body.classList.toggle('hide');
@@ -250,14 +294,14 @@ async function openBook(id) {
   book = await dbGet('books', id); const f = await dbGet('files', id);
   pdf = await pdfjsLib.getDocument(pdfOpts(await f.blob.arrayBuffer())).promise;
   if (S.crop && !book.crop) { book.crop = await calcCrop(); }
-  crop = book.crop || crop; cur = book.page || 1;
+  crop = book.crop || crop; cur = book.page || 1; NOTES = (await tx('notes','readonly', s => s.getAll())).filter(n => n.book === id);
   $('#ttl').textContent = book.name; $('#lib').hidden = true; $('#rd').hidden = false;
   document.body.classList.remove('hide'); closeSheets(); history.pushState({r:1}, '');
   await build(); msg('');
   setTimeout(() => document.body.classList.add('hide'), 1800);
 }
 function closeReader() {
-  saveProgress(); io?.disconnect(); pdf?.destroy(); pdf = book = null; pgs = []; view.innerHTML = '';
+  saveProgress(); io?.disconnect(); pdf?.destroy(); pdf = book = null; pgs = []; NOTES = []; view.innerHTML = '';
   $('#rd').hidden = true; $('#lib').hidden = false; renderLib();
 }
 $('#back').onclick = () => history.back();
@@ -265,8 +309,125 @@ addEventListener('popstate', () => { if (!$('#rd').hidden) closeReader(); });
 addEventListener('pagehide', saveProgress);
 document.addEventListener('visibilitychange', () => document.hidden && saveProgress());
 
+/* ---------- التظليل والملاحظات ---------- */
+const COL = ['#ffe14d','#6ee7a0','#7cc4ff','#ff9db1'];
+const repaint = () => view.querySelectorAll('.pg').forEach(paintHl);
+function paintHl(wrap) {
+  const hl = wrap.querySelector('.hl'); if (!hl) return; hl.innerHTML = ''; const c = wrap._c;
+  for (const h of NOTES) if (h.page === wrap._n) for (const r of h.rects) {
+    const d = document.createElement('i');
+    d.style.cssText = `left:${(r.x - c.l) / (c.r - c.l) * 100}%;top:${(r.y - c.t) / (c.b - c.t) * 100}%;width:${r.w / (c.r - c.l) * 100}%;height:${r.h / (c.b - c.t) * 100}%;background:${COL[h.color]}`;
+    hl.appendChild(d);
+  }
+}
+async function addHl(page, rects, text, color) {
+  const h = {id:crypto.randomUUID(), book:book.id, bookName:book.name, page, rects, text, color, note:'', tags:[], ts:Date.now()};
+  NOTES.push(h); await dbPut('notes', h); repaint(); return h;
+}
+function curSel() {
+  const s = getSelection(); if (!s || s.isCollapsed || !s.rangeCount) return null;
+  const r = s.getRangeAt(0), wrap = (r.startContainer.parentElement || r.startContainer).closest?.('.pg');
+  if (!wrap?._c || !view.contains(wrap)) return null;
+  const wb = wrap.getBoundingClientRect(), c = wrap._c, rects = [], seen = new Set();
+  for (const q of r.getClientRects()) {
+    if (q.width < 2 || q.height < 2 || q.height > wb.height * .2) continue;
+    const k = [q.left, q.top, q.width, q.height].map(v => Math.round(v / 2)).join();
+    if (seen.has(k)) continue; seen.add(k);
+    rects.push({x:c.l + (q.left - wb.left) / wb.width * (c.r - c.l), y:c.t + (q.top - wb.top) / wb.height * (c.b - c.t), w:q.width / wb.width * (c.r - c.l), h:q.height / wb.height * (c.b - c.t)});
+  }
+  const text = s.toString().replace(/\s+/g, ' ').trim();
+  return rects.length && text ? {page:wrap._n, rects, text, top:r.getBoundingClientRect().top} : null;
+}
+const stb = $('#stb'); let lastQ = null, selT, hideT;
+document.addEventListener('selectionchange', () => {
+  clearTimeout(selT);
+  selT = setTimeout(() => {
+    const q = curSel();
+    if (q) { clearTimeout(hideT); lastQ = q; stb.hidden = false; stb.style.top = Math.max(80, q.top - 54) + 'px'; }
+    else { clearTimeout(hideT); hideT = setTimeout(() => { stb.hidden = true; lastQ = null; }, 600); }
+  }, 200);
+});
+async function makeHl(color, note) {
+  const q = lastQ; if (!q) return;
+  const h = await addHl(q.page, q.rects, q.text, color);
+  getSelection().removeAllRanges(); stb.hidden = true; lastQ = null;
+  if (note) openEditor(h);
+}
+stb.querySelectorAll('.c').forEach(b => b.onclick = () => makeHl(+b.dataset.c, false));
+$('#stn').onclick = () => makeHl(0, true);
+
+/* وضع المستطيل (للكتب التي لا يصلح فيها تحديد النص) */
+let area = false, ad, aw, ax, ay;
+$('#areab').onclick = () => {
+  area = !area; view.style.touchAction = area ? 'none' : ''; view.style.userSelect = area ? 'none' : '';
+  $('#areab').classList.toggle('on', area);
+  if (area) { msg('وضع المستطيل: اسحب لتظليل مساحة'); setTimeout(() => msg(''), 2200); }
+};
+view.addEventListener('pointerdown', e => {
+  if (!area) return; aw = e.target.closest('.pg'); if (!aw?._c) return;
+  ax = e.clientX; ay = e.clientY; ad = document.createElement('div'); ad.className = 'ar'; aw.appendChild(ad);
+});
+view.addEventListener('pointermove', e => {
+  if (!ad) return; const wb = aw.getBoundingClientRect();
+  Object.assign(ad.style, {left:Math.min(ax, e.clientX) - wb.left + 'px', top:Math.min(ay, e.clientY) - wb.top + 'px', width:Math.abs(e.clientX - ax) + 'px', height:Math.abs(e.clientY - ay) + 'px'});
+});
+view.addEventListener('pointerup', async e => {
+  if (!ad) return; const wb = aw.getBoundingClientRect(), c = aw._c; ad.remove(); ad = null;
+  const w = Math.abs(e.clientX - ax), h = Math.abs(e.clientY - ay); if (w < 12 || h < 8) return;
+  const r = {x:c.l + (Math.min(ax, e.clientX) - wb.left) / wb.width * (c.r - c.l), y:c.t + (Math.min(ay, e.clientY) - wb.top) / wb.height * (c.b - c.t), w:w / wb.width * (c.r - c.l), h:h / wb.height * (c.b - c.t)};
+  openEditor(await addHl(aw._n, [r], '', 0));
+});
+
+/* نافذة تعديل الملاحظة */
+let eh = null;
+const snip = (t, n) => t ? (t.length > n ? t.slice(0, n) + '…' : t) : '[تظليل مساحة]';
+function renderCols() {
+  const col = $('#edcol'); col.innerHTML = '';
+  COL.forEach((c, i) => { const b = document.createElement('button'); b.style.cssText = `width:32px;height:32px;border-radius:50%;padding:0;background:${c};border:3px solid ${i === eh.color ? 'var(--fg)' : 'transparent'}`; b.onclick = () => { eh.color = i; renderCols(); }; col.appendChild(b); });
+}
+async function openEditor(h) {
+  eh = h; closeSheets(); $('#edq').textContent = h.text ? '«' + snip(h.text, 60) + '»' : 'تظليل مساحة';
+  $('#edn').value = h.note; $('#edt').value = h.tags.join('، '); renderCols();
+  const cnt = {}; (await tx('notes', 'readonly', s => s.getAll())).forEach(n => n.tags.forEach(t => cnt[t] = (cnt[t] || 0) + 1));
+  const box = $('#edc'); box.innerHTML = '';
+  Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 20).forEach(t => {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = '#' + t;
+    b.onclick = () => { const cur = $('#edt').value.split(/[,،]+/).map(x => x.trim()).filter(Boolean); if (!cur.includes(t)) cur.push(t); $('#edt').value = cur.join('، '); };
+    box.appendChild(b);
+  });
+  $('#eds').hidden = $('#shade').hidden = false;
+}
+$('#edsv').onclick = async () => {
+  eh.note = $('#edn').value.trim();
+  eh.tags = [...new Set($('#edt').value.split(/[,،]+/).map(x => x.trim().replace(/^#/, '')).filter(Boolean))];
+  await dbPut('notes', eh); repaint(); closeSheets();
+};
+$('#edd').onclick = async () => {
+  if (!confirm('حذف هذا التظليل؟')) return;
+  await tx('notes', 'readwrite', s => s.delete(eh.id)); NOTES = NOTES.filter(x => x !== eh); repaint(); closeSheets();
+};
+
+/* فهرس ملاحظات الكتاب */
+$('#nb').onclick = () => { closeSheets(); renderNL(); $('#nls').hidden = $('#shade').hidden = false; };
+function renderNL() {
+  const box = $('#nl'); box.innerHTML = '';
+  if (!NOTES.length) { box.textContent = 'لا توجد ملاحظات بعد. حدّد نصاً في الكتاب (بالضغط المطوّل) لتظليله.'; return; }
+  [...NOTES].sort((a, b) => a.page - b.page || a.ts - b.ts).forEach(h => {
+    const it = document.createElement('div'); it.className = 'ni';
+    const bar = document.createElement('i'); bar.style.background = COL[h.color];
+    const t = document.createElement('div');
+    const sm = document.createElement('small'); sm.textContent = 'صفحة ' + h.page + (h.tags.length ? ' · ' + h.tags.map(x => '#' + x).join(' ') : '');
+    const tx2 = document.createElement('div'); tx2.textContent = snip(h.text, 120);
+    t.append(sm, tx2);
+    if (h.note) { const n = document.createElement('div'); n.textContent = '✎ ' + h.note; n.style.color = 'var(--ac)'; t.append(n); }
+    const ed = document.createElement('button'); ed.textContent = 'تعديل'; ed.onclick = ev => { ev.stopPropagation(); openEditor(h); };
+    it.append(bar, t, ed); it.onclick = () => { closeSheets(); go(h.page); };
+    box.appendChild(it);
+  });
+}
+
 /* ---------- الفهرس والإعدادات ---------- */
-const closeSheets = () => { $('#tocs').hidden = $('#sets').hidden = $('#shade').hidden = true; };
+const closeSheets = () => { $('#tocs').hidden = $('#sets').hidden = $('#eds').hidden = $('#nls').hidden = $('#shade').hidden = true; };
 $('#shade').onclick = closeSheets;
 $('#tocb').onclick = async () => {
   closeSheets(); $('#tocs').hidden = $('#shade').hidden = false;
