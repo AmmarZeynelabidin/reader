@@ -101,7 +101,7 @@ const dbPut = (st, v) => tx(st,'readwrite', s => s.put(v));
 const dbDel = id => Promise.all([tx('books','readwrite', s => s.delete(id)), tx('files','readwrite', s => s.delete(id))]);
 
 const msg = t => { const m = $('#msg'); m.textContent = t; m.hidden = !t; };
-const pdfOpts = data => ({data, cMapUrl:'./lib/cmaps/', cMapPacked:true, standardFontDataUrl:'./lib/standard_fonts/'});
+const pdfOpts = data => ({data, cMapUrl:'./lib/cmaps/', cMapPacked:true, standardFontDataUrl:'./lib/standard_fonts/', disableFontFace:true, useSystemFonts:false});
 
 /* ---------- المكتبة ---------- */
 async function renderLib() {
