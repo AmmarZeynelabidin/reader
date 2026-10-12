@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14202b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>قارئي</title>
+<style>
+:root{--bg:#eef1f3;--fg:#14202b;--mut:#66727d;--ac:#0f766e;--bar:#fff;--ln:#d5dbe0;--pg:#fff}
+body[data-t=dark]{--bg:#0f1418;--fg:#dfe6ea;--mut:#8a97a0;--ac:#2dd4bf;--bar:#171e24;--ln:#26303a;--pg:#000}
+body[data-t=sepia]{--bg:#e9dfc8;--fg:#3b2f1e;--mut:#7d6c52;--ac:#9a5b13;--bar:#f3ead3;--ln:#d3c5a5;--pg:#f4ecd8}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:"Noto Naskh Arabic","Droid Arabic Naskh",system-ui,sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;padding:10px 12px;cursor:pointer}
+[hidden]{display:none!important}
+#lib{height:100%;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+#lib header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--ln)}
+#lib h1{margin:0;font-size:22px}
+.add{background:var(--ac);color:#fff;border-radius:8px;font-weight:700}
+body[data-t=dark] .add{color:#04201c}
+#grid{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:18px 12px;padding:16px;align-content:start}
+.bk{position:relative;text-align:start;padding:0}
+.bk img,.bk .ph{width:100%;aspect-ratio:3/4;object-fit:cover;border:1px solid var(--ln);border-radius:4px;background:var(--pg);display:block}
+.bk b{display:block;font-size:13px;margin-top:6px;line-height:1.4;max-height:2.8em;overflow:hidden}
+.bar{height:3px;background:var(--ln);margin-top:5px}.bar i{display:block;height:100%;background:var(--ac)}
+.bk small{color:var(--mut);font-size:11px}
+.x{position:absolute;top:4px;inset-inline-start:4px;background:#000a;color:#fff;border-radius:50%;width:26px;height:26px;padding:0;font-size:14px}
+.empty{grid-column:1/-1;text-align:center;color:var(--mut);margin-top:25vh;line-height:2}
+#rd{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column}
+.top,.bot{position:absolute;inset-inline:0;background:var(--bar);border-color:var(--ln);z-index:5;display:flex;align-items:center;transition:transform .2s}
+.top{top:0;border-bottom:1px solid;padding-top:env(safe-area-inset-top)}
+.bot{bottom:0;border-top:1px solid;padding:6px 10px calc(6px + env(safe-area-inset-bottom))}
+.top span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:700;padding:0 8px}
+body.hide .top{transform:translateY(-110%)}body.hide .bot{transform:translateY(110%)}
+#view{position:relative;flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+#view.scroll{padding:8px 0}
+.pg{margin:0 auto 8px;background:var(--pg)}
+#view.paged{display:flex;align-items:flex-start;justify-content:flex-start}
+#view.paged canvas{margin:auto}
+canvas{display:block}
+body[data-t=dark] canvas{filter:invert(.9) hue-rotate(180deg)}
+body[data-t=sepia] canvas{filter:sepia(.45) contrast(.95)}
+#sl{flex:1;direction:ltr;accent-color:var(--ac);margin:0 8px}
+#pn{min-width:84px;text-align:center;font-size:13px;color:var(--mut)}
+.sheet{position:absolute;inset-inline:0;bottom:0;max-height:75%;overflow:auto;background:var(--bar);border-top:1px solid var(--ln);z-index:9;padding:12px 14px calc(14px + env(safe-area-inset-bottom));border-radius:14px 14px 0 0}
+.sheet h3{margin:4px 0 10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--ln)}
+.seg{display:flex;border:1px solid var(--ln);border-radius:8px;overflow:hidden}
+.seg button{padding:7px 12px;font-size:14px}.seg .on{background:var(--ac);color:#fff}
+body[data-t=dark] .seg .on{color:#04201c}
+#toc button{display:block;width:100%;text-align:start;border-bottom:1px solid var(--ln)}
+#msg{position:fixed;inset-inline:16px;bottom:24px;background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:8px;z-index:20;text-align:center}
+#shade{position:absolute;inset:0;z-index:8}
+</style>
+</head>
+<body data-t="light">
+<div id="lib">
+  <header><h1>مكتبتي</h1><button class="add" id="add">إضافة كتب</button></header>
+  <div id="grid"></div>
+  <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
+</div>
+
+<div id="rd" hidden>
+  <div class="top"><button id="back">رجوع</button><span id="ttl"></span><button id="tocb">الفهرس</button><button id="setb">إعدادات</button></div>
+  <div id="view"></div>
+  <div class="bot"><button id="pv">السابق</button><input id="sl" type="range" min="1" value="1"><span id="pn"></span><button id="nx">التالي</button></div>
+  <div id="shade" hidden></div>
+  <div class="sheet" id="tocs" hidden><h3>الفهرس</h3><div id="toc"></div></div>
+  <div class="sheet" id="sets" hidden>
+    <h3>الإعدادات</h3>
+    <div class="row">المظهر<div class="seg" data-k="theme"><button data-v="light">فاتح</button><button data-v="sepia">سيبيا</button><button data-v="dark">داكن</button></div></div>
+    <div class="row">طريقة القراءة<div class="seg" data-k="mode"><button data-v="scroll">تمرير</button><button data-v="paged">صفحات</button></div></div>
+    <div class="row">اتجاه التقليب<div class="seg" data-k="rtl"><button data-v="true">من اليمين</button><button data-v="false">من اليسار</button></div></div>
+    <div class="row">قص الهوامش<div class="seg" data-k="crop"><button data-v="true">تشغيل</button><button data-v="false">إيقاف</button></div></div>
+    <div class="row">التكبير<div class="seg"><button id="zo">−</button><button id="zv" disabled></button><button id="zi">+</button></div></div>
+  </div>
+</div>
+<div id="msg" hidden></div>
+
+<script type="module">
+import * as pdfjsLib from './lib/pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.mjs';
+const $ = s => document.querySelector(s);
+const S = Object.assign({theme:'light',mode:'scroll',rtl:true,crop:true,zoom:1}, JSON.parse(localStorage.rs || '{}'));
+const saveS = () => localStorage.rs = JSON.stringify(S);
+document.body.dataset.t = S.theme;
+
+/* ---------- التخزين المحلي ---------- */
+const dbp = new Promise((ok, no) => {
+  const r = indexedDB.open('reader', 1);
+  r.onupgradeneeded = () => { r.result.createObjectStore('books', {keyPath:'id'}); r.result.createObjectStore('files', {keyPath:'id'}); };
+  r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+});
+const tx = async (st, mode, fn) => { const db = await dbp; return new Promise((ok, no) => { const t = db.transaction(st, mode); const q = fn(t.objectStore(st)); t.oncomplete = () => ok(q.result); t.onerror = () => no(t.error); }); };
+const dbGetAll = () => tx('books','readonly', s => s.getAll());
+const dbGet = (st, id) => tx(st,'readonly', s => s.get(id));
+const dbPut = (st, v) => tx(st,'readwrite', s => s.put(v));
+const dbDel = id => Promise.all([tx('books','readwrite', s => s.delete(id)), tx('files','readwrite', s => s.delete(id))]);
+
+const msg = t => { const m = $('#msg'); m.textContent = t; m.hidden = !t; };
+const pdfOpts = data => ({data, cMapUrl:'./lib/cmaps/', cMapPacked:true, standardFontDataUrl:'./lib/standard_fonts/'});
+
+/* ---------- المكتبة ---------- */
+async function renderLib() {
+  const books = (await dbGetAll()).sort((a, b) => b.last - a.last);
+  const g = $('#grid'); g.innerHTML = '';
+  if (!books.length) { g.innerHTML = '<div class="empty">لا توجد كتب بعد.<br>اضغط «إضافة كتب» واختر ملفات PDF من جهازك.</div>'; return; }
+  for (const b of books) {
+    const d = document.createElement('div');
+    const pct = Math.round((b.page - 1) / Math.max(1, b.pages - 1) * 100);
+    d.className = 'bk';
+    d.innerHTML = `<button class="bk" style="width:100%"><img src="${b.cover || ''}" alt=""><b></b><div class="bar"><i style="width:${pct}%"></i></div><small>${pct}% · ${b.pages} صفحة</small></button><button class="x" title="حذف">×</button>`;
+    d.querySelector('b').textContent = b.name;
+    d.querySelector('.bk').onclick = () => openBook(b.id);
+    d.querySelector('.x').onclick = async () => { if (confirm('حذف «' + b.name + '» من التطبيق؟')) { await dbDel(b.id); renderLib(); } };
+    g.appendChild(d);
+  }
+}
+$('#add').onclick = () => $('#file').click();
+$('#file').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  navigator.storage?.persist?.();
+  const old = await dbGetAll();
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]; msg(`جارٍ استيراد ${i + 1} من ${files.length}…`);
+    if (old.some(o => o.size === f.size && o.name === f.name.replace(/\.pdf$/i, ''))) continue;
+    try {
+      const doc = await pdfjsLib.getDocument(pdfOpts(await f.arrayBuffer())).promise;
+      const p = await doc.getPage(1), v0 = p.getViewport({scale:1}), sc = 260 / v0.width;
+      const c = document.createElement('canvas'), v = p.getViewport({scale:sc});
+      c.width = v.width; c.height = v.height;
+      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      await p.render({canvasContext:x, viewport:v}).promise;
+      const id = crypto.randomUUID();
+      await dbPut('files', {id, blob:f});
+      await dbPut('books', {id, name:f.name.replace(/\.pdf$/i, ''), size:f.size, pages:doc.numPages, page:1, cover:c.toDataURL('image/jpeg', .7), added:Date.now(), last:Date.now()});
+      doc.destroy();
+    } catch (err) { alert('تعذّر فتح الملف: ' + f.name); }
+  }
+  msg(''); renderLib();
+};
+
+/* ---------- القارئ ---------- */
+let pdf, book, cur = 1, crop = {l:0,t:0,r:1,b:1}, io, pgs = [], est = 0, saveT;
+const view = $('#view');
+
+async function calcCrop() {
+  let l = 1, t = 1, r = 0, b = 0; const n = pdf.numPages;
+  const pick = [...new Set([Math.min(2, n), Math.ceil(n / 3), Math.ceil(n / 2), Math.ceil(n * 2 / 3)])];
+  for (const i of pick) {
+    const p = await pdf.getPage(i), v = p.getViewport({scale:.4});
+    const c = document.createElement('canvas'); c.width = v.width; c.height = v.height;
+    const x = c.getContext('2d', {willReadFrequently:true}); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    await p.render({canvasContext:x, viewport:v}).promise;
+    const d = x.getImageData(0, 0, c.width, c.height).data;
+    for (let y = 0; y < c.height; y++) for (let xx = 0; xx < c.width; xx++) {
+      const k = (y * c.width + xx) * 4;
+      if (d[k] + d[k+1] + d[k+2] < 690) { l = Math.min(l, xx / c.width); r = Math.max(r, (xx + 1) / c.width); t = Math.min(t, y / c.height); b = Math.max(b, (y + 1) / c.height); }
+    }
+  }
+  const pd = .02;
+  if (r - l < .3 || b - t < .3) return {l:0,t:0,r:1,b:1};
+  return {l:Math.max(0, l - pd), t:Math.max(0, t - pd), r:Math.min(1, r + pd), b:Math.min(1, b + pd)};
+}
+
+async function draw(n, canvas) {
+  const p = await pdf.getPage(n), v0 = p.getViewport({scale:1});
+  const c = S.crop ? crop : {l:0,t:0,r:1,b:1};
+  const cw = (c.r - c.l) * v0.width, ch = (c.b - c.t) * v0.height;
+  const css = (view.clientWidth - 8) * S.zoom, sc = css / cw, dpr = Math.min(devicePixelRatio || 1, 2.5);
+  canvas._t?.cancel();
+  canvas.width = Math.round(cw * sc * dpr); canvas.height = Math.round(ch * sc * dpr);
+  canvas.style.width = css + 'px'; canvas.style.height = (ch * sc) + 'px';
+  const task = canvas._t = p.render({canvasContext:canvas.getContext('2d'), viewport:p.getViewport({scale:sc * dpr}),
+    transform:[1,0,0,1,-c.l * v0.width * sc * dpr, -c.t * v0.height * sc * dpr]});
+  try { await task.promise; } catch (e) { if (e?.name !== 'RenderingCancelledException') throw e; }
+}
+
+async function build() {
+  io?.disconnect(); view.innerHTML = ''; view.scrollTop = 0;
+  view.className = S.mode;
+  const p1 = await pdf.getPage(1), v0 = p1.getViewport({scale:1});
+  const c = S.crop ? crop : {l:0,t:0,r:1,b:1};
+  const css = (view.clientWidth - 8) * S.zoom;
+  est = css * ((c.b - c.t) * v0.height) / ((c.r - c.l) * v0.width);
+  if (S.mode === 'scroll') {
+    pgs = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const d = document.createElement('div'); d.className = 'pg'; d.dataset.n = i; d.style.height = est + 'px'; d.style.width = css + 'px';
+      view.appendChild(d); pgs.push(d);
+    }
+    io = new IntersectionObserver(es => es.forEach(e => {
+      const d = e.target;
+      if (e.isIntersecting) { if (!d.firstChild) { const cv = document.createElement('canvas'); d.appendChild(cv); draw(+d.dataset.n, cv).then(() => d.style.height = cv.style.height); } }
+      else if (d.firstChild) { d.firstChild._t?.cancel(); d.innerHTML = ''; }
+    }), {root:view, rootMargin:'1500px 0px'});
+    pgs.forEach(d => io.observe(d));
+    view.scrollTop = pgs[cur - 1].offsetTop - 8;
+  } else {
+    const cv = document.createElement('canvas'); view.appendChild(cv); await draw(cur, cv);
+  }
+  ui();
+}
+
+function ui() {
+  $('#sl').max = pdf.numPages; $('#sl').value = cur;
+  $('#pn').textContent = cur + ' / ' + pdf.numPages;
+  clearTimeout(saveT);
+  saveT = setTimeout(saveProgress, 600);
+}
+function saveProgress() { if (!book) return; book.page = cur; book.last = Date.now(); dbPut('books', book); }
+
+view.addEventListener('scroll', () => {
+  if (S.mode !== 'scroll' || !pgs.length) return;
+  const mid = view.scrollTop + view.clientHeight / 3; let lo = 0, hi = pgs.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (pgs[m].offsetTop <= mid) lo = m; else hi = m - 1; }
+  if (lo + 1 !== cur) { cur = lo + 1; ui(); }
+}, {passive:true});
+
+async function go(n) {
+  n = Math.max(1, Math.min(pdf.numPages, n));
+  if (S.mode === 'scroll') { view.scrollTop = pgs[n - 1].offsetTop - 8; cur = n; ui(); }
+  else { cur = n; const cv = view.firstChild; await draw(n, cv); view.scrollTop = 0; ui(); }
+}
+const next = () => go(cur + 1), prev = () => go(cur - 1);
+$('#nx').onclick = next; $('#pv').onclick = prev;
+$('#sl').oninput = e => $('#pn').textContent = e.target.value + ' / ' + pdf.numPages;
+$('#sl').onchange = e => go(+e.target.value);
+
+/* لمس: وسط الشاشة يُظهر/يُخفي الأزرار، وفي وضع الصفحات الأطراف تقلّب */
+let tx0, ty0;
+view.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; ty0 = e.touches[0].clientY; }, {passive:true});
+view.addEventListener('touchend', e => {
+  if (S.mode !== 'paged') return;
+  const dx = e.changedTouches[0].clientX - tx0, dy = e.changedTouches[0].clientY - ty0;
+  if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5 && view.scrollWidth <= view.clientWidth + 4) (dx > 0) === S.rtl ? next() : prev();
+});
+view.addEventListener('click', e => {
+  const x = e.clientX / innerWidth;
+  if (S.mode === 'paged' && (x < .25 || x > .75)) { (x < .25) === S.rtl ? prev() : next(); return; }
+  document.body.classList.toggle('hide');
+});
+
+async function openBook(id) {
+  msg('جارٍ فتح الكتاب…');
+  book = await dbGet('books', id); const f = await dbGet('files', id);
+  pdf = await pdfjsLib.getDocument(pdfOpts(await f.blob.arrayBuffer())).promise;
+  if (S.crop && !book.crop) { book.crop = await calcCrop(); }
+  crop = book.crop || crop; cur = book.page || 1;
+  $('#ttl').textContent = book.name; $('#lib').hidden = true; $('#rd').hidden = false;
+  document.body.classList.remove('hide'); closeSheets(); history.pushState({r:1}, '');
+  await build(); msg('');
+  setTimeout(() => document.body.classList.add('hide'), 1800);
+}
+function closeReader() {
+  saveProgress(); io?.disconnect(); pdf?.destroy(); pdf = book = null; pgs = []; view.innerHTML = '';
+  $('#rd').hidden = true; $('#lib').hidden = false; renderLib();
+}
+$('#back').onclick = () => history.back();
+addEventListener('popstate', () => { if (!$('#rd').hidden) closeReader(); });
+addEventListener('pagehide', saveProgress);
+document.addEventListener('visibilitychange', () => document.hidden && saveProgress());
+
+/* ---------- الفهرس والإعدادات ---------- */
+const closeSheets = () => { $('#tocs').hidden = $('#sets').hidden = $('#shade').hidden = true; };
+$('#shade').onclick = closeSheets;
+$('#tocb').onclick = async () => {
+  closeSheets(); $('#tocs').hidden = $('#shade').hidden = false;
+  const box = $('#toc'); box.textContent = 'جارٍ التحميل…';
+  const o = await pdf.getOutline();
+  if (!o) { box.textContent = 'لا يوجد فهرس داخل هذا الكتاب. استخدم شريط الصفحات بالأسفل.'; return; }
+  box.innerHTML = '';
+  const walk = async (items, lv) => {
+    for (const it of items) {
+      let pg = null;
+      try { let d = it.dest; if (typeof d === 'string') d = await pdf.getDestination(d); if (d) pg = (await pdf.getPageIndex(d[0])) + 1; } catch {}
+      const b = document.createElement('button'); b.textContent = it.title; b.style.paddingInlineStart = (12 + lv * 16) + 'px';
+      if (pg) b.onclick = () => { closeSheets(); go(pg); }; else b.style.opacity = .5;
+      box.appendChild(b);
+      if (it.items?.length) await walk(it.items, lv + 1);
+    }
+  };
+  await walk(o, 0);
+};
+function syncSets() {
+  document.querySelectorAll('.seg[data-k]').forEach(s => s.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === String(S[s.dataset.k]))));
+  $('#zv').textContent = Math.round(S.zoom * 100) + '%';
+}
+$('#setb').onclick = () => { closeSheets(); syncSets(); $('#sets').hidden = $('#shade').hidden = false; };
+document.querySelectorAll('.seg[data-k] button').forEach(b => b.onclick = async () => {
+  const k = b.parentNode.dataset.k; let v = b.dataset.v; if (v === 'true') v = true; if (v === 'false') v = false;
+  S[k] = v; saveS(); syncSets();
+  if (k === 'theme') document.body.dataset.t = v;
+  if (k === 'mode' || k === 'crop') { if (k === 'crop' && v && !book.crop) { book.crop = await calcCrop(); crop = book.crop; } await build(); }
+});
+const zoom = d => { S.zoom = Math.max(.6, Math.min(3, +(S.zoom + d).toFixed(2))); saveS(); syncSets(); build(); };
+$('#zi').onclick = () => zoom(.2); $('#zo').onclick = () => zoom(-.2);
+
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => pdf && build(), 300); });
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+renderLib();
+</script>
+</body>
+</html>
