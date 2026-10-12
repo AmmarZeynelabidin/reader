@@ -58,7 +58,7 @@ body[data-t=dark] .seg .on{color:#04201c}
 </head>
 <body data-t="light">
 <div id="lib">
-  <header><h1>مكتبتي</h1><button class="add" id="add">إضافة كتب</button></header>
+  <header><h1>مكتبتي <small style="font-size:11px;color:var(--mut)">v3</small></h1><button class="add" id="add">إضافة كتب</button></header>
   <div id="grid"></div>
   <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
 </div>
@@ -80,9 +80,10 @@ body[data-t=dark] .seg .on{color:#04201c}
 </div>
 <div id="msg" hidden></div>
 
+<script src="lib/pdf.min.js"></script>
 <script type="module">
-import * as pdfjsLib from './lib/pdf.min.mjs';
-pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.mjs';
+const pdfjsLib = window.pdfjsLib;
+pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.js';
 const $ = s => document.querySelector(s);
 const S = Object.assign({theme:'light',mode:'scroll',rtl:true,crop:true,zoom:1}, JSON.parse(localStorage.rs || '{}'));
 const saveS = () => localStorage.rs = JSON.stringify(S);
